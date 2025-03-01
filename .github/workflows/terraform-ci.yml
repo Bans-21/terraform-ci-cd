@@ -48,14 +48,16 @@ jobs:
     needs: terraform-test
     runs-on: ubuntu-latest
     steps:
-        - name: Merge feature to dev
-          uses: devmasx/merge-branch@v1.3.1
-          with:
-            type: now
-            from_branch: ${{ github.ref_name }}
-            target_branch: dev
-            github_token: ${{ secrets.GITHUB_TOKEN }}
-            merge_method: "merge"  # Options: merge, squash, rebase
+        - name: Auto-merge feature to dev
+          run: |
+            git fetch origin
+            git checkout dev
+            git pull origin dev
+            git merge origin/${{ github.ref_name }} --strategy-option theirs || true
+            git push origin dev
+          env:
+            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
 
   create-pull-request-to-main:
     needs: auto-merge-to-dev
