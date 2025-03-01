@@ -51,25 +51,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Pull latest changes from dev
-        run: |
-          git fetch origin dev:dev
-          git checkout dev
-          git pull origin dev
-
-      - name: Rebase feature branch onto dev
-        run: |
-          git checkout ${{ github.ref_name }}
-          git rebase dev
-          git push --force-with-lease
-
-      - name: Merge feature to dev
+      - name: Attempt Auto-Merge to Dev
+        id: auto-merge
         uses: devmasx/merge-branch@v1.3.1
         with:
           type: now
           from_branch: ${{ github.ref_name }}
           target_branch: dev
           github_token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true  # Continue even if merge fails
+
+      - name: Check Merge Result
+        if: steps.auto-merge.outcome == 'failure'
+        run: echo "Auto-merge failed due to conflicts. Falling back to creating a PR."
+
+      - name: Create Pull Request to Dev
+        if: steps.auto-merge.outcome == 'failure'
+        uses: repo-sync/pull-request@v2
+        with:
+          source_branch: ${{ github.ref_name }}  # Current feature branch
+          destination_branch: dev               # Target branch
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          pr_title: "Auto PR: ${{ github.ref_name }} to Dev"
+          pr_body: "This PR is automatically created because auto-merge failed due to conflicts."
 
 
   create-pull-request-to-main:
