@@ -4,6 +4,19 @@ on:
   push:
     branches:
       - 'feature/**'
+env:
+    AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+    AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    AWS_DEFAULT_REGION: ap-southeast-1
+
+
+permissions:
+  id-token: write
+  contents: write
+  pull-requests: write
+    
+
+
 
 env:
     AWS_DEFAULT_REGION: us-east-1
@@ -21,6 +34,13 @@ jobs:
           aws-region: us-east-1
       - name: Checkout code
         uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_DEFAULT_REGION }}
       
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -41,24 +61,45 @@ jobs:
     needs: terraform-test
     runs-on: ubuntu-latest
     steps:
-      - name: Merge feature to dev
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Attempt Auto-Merge to Dev
+        id: auto-merge
         uses: devmasx/merge-branch@v1.3.1
         with:
           type: now
           from_branch: ${{ github.ref_name }}
           target_branch: dev
           github_token: ${{ secrets.GITHUB_TOKEN }}
+        continue-on-error: true  # Continue even if merge fails
 
-  create-pull-request-to-main:
-    needs: auto-merge-to-dev
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create pull request to main
+      - name: Check Merge Result
+        if: steps.auto-merge.outcome == 'failure'
+        run: echo "Auto-merge failed due to conflicts. Falling back to creating a PR."
+
+      - name: Create Pull Request to Dev
+        if: steps.auto-merge.outcome == 'failure'
         uses: repo-sync/pull-request@v2
         with:
-          source_branch: dev
-          destination_branch: main
+          source_branch: ${{ github.ref_name }}  # Current feature branch
+          destination_branch: dev               # Target branch
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          pr_title: 'Auto PR: Dev to Main'
-          pr_body: 'This PR is automatically created after successful feature merge to dev.'
+          pr_title: "Auto PR: ${{ github.ref_name }} to Dev"
+          pr_body: "This PR is automatically created because auto-merge failed due to conflicts."
 
+  create-pull-request-to-main:
+      needs: auto-merge-to-dev
+      runs-on: ubuntu-latest
+      steps:
+        - name: Checkout code
+          uses: actions/checkout@v2
+
+        - name: Create pull request to main
+          uses: repo-sync/pull-request@v2
+          with:
+            source_branch: dev
+            destination_branch: main
+            github_token: ${{ secrets.GITHUB_TOKEN }}
+            pr_title: 'Auto PR: Dev to Main'
+            pr_body: 'This PR is automatically created after successful feature merge to dev.'
