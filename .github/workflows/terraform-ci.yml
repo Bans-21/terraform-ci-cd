@@ -75,7 +75,6 @@ jobs:
           pr_title: "Auto PR: ${{ github.ref_name }} to Dev"
           pr_body: "This PR is automatically created because auto-merge failed due to conflicts."
 
-
   create-pull-request-to-main:
     needs: auto-merge-to-dev
     runs-on: ubuntu-latest
